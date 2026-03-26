@@ -1,0 +1,12 @@
+.DS_Store
+*.pyc
+__pycache__/
+.pio/
+firmware/.pio/
+*.bin
+*.elf
+.idea/
+.vscode/
+*.log
+.env
+node_modules/
