@@ -123,7 +123,37 @@ export default definePluginEntry({
 
     // ========== 注册 Gateway HTTP 路由 ==========
 
-    // 控制面板页面
+    // 认证中间件 - 检查请求是否来自已认证的 Gateway 会话
+    const requireAuth = (handler: Function) => {
+      return async (req: any, res: any) => {
+        // 检查来源是否为 Gateway 本地
+        const origin = req.headers?.origin || '';
+        const referer = req.headers?.referer || '';
+        const host = req.headers?.host || 'localhost:18789';
+
+        // 允许来自 Gateway Control UI 的请求
+        const isFromGateway = origin.includes(host) ||
+                              referer.includes(host) ||
+                              req.ip === '127.0.0.1' ||
+                              req.ip === '::1';
+
+        if (!isFromGateway) {
+          // 检查 Authorization header
+          const authHeader = req.headers?.authorization || '';
+          const token = authHeader.replace('Bearer ', '');
+
+          // 验证 token（与 Gateway 共享配置）
+          const gatewayToken = process.env.OPENCLAW_GATEWAY_TOKEN;
+          if (!gatewayToken || token !== gatewayToken) {
+            return res.status(401).json({ error: 'Unauthorized' });
+          }
+        }
+
+        return handler(req, res);
+      };
+    };
+
+    // 控制面板页面（无需认证，前端会检查）
     api.registerGatewayMethod?.({
       method: 'GET',
       path: '/smarthome',
@@ -133,76 +163,76 @@ export default definePluginEntry({
       }
     });
 
-    // API: 获取设备列表
+    // API: 获取设备列表（需要认证）
     api.registerGatewayMethod?.({
       method: 'GET',
       path: '/api/smarthome/devices',
-      handler: async (req, res) => {
+      handler: requireAuth(async (req: any, res: any) => {
         res.json(await deviceManager.listDevices());
-      }
+      })
     });
 
-    // API: 发现新设备
+    // API: 发现新设备（需要认证）
     api.registerGatewayMethod?.({
       method: 'POST',
       path: '/api/smarthome/discover',
-      handler: async (req, res) => {
+      handler: requireAuth(async (req: any, res: any) => {
         const devices = await deviceManager.discoverDevices(5);
         res.json({ devices, count: devices.length });
-      }
+      })
     });
 
-    // API: 同步设备状态
+    // API: 同步设备状态（需要认证）
     api.registerGatewayMethod?.({
       method: 'POST',
       path: '/api/smarthome/sync',
-      handler: async (req, res) => {
+      handler: requireAuth(async (req: any, res: any) => {
         const result = await deviceManager.syncAllDevices();
         res.json(result);
-      }
+      })
     });
 
-    // API: 控制单个设备
+    // API: 控制单个设备（需要认证）
     api.registerGatewayMethod?.({
       method: 'POST',
       path: '/api/smarthome/control/:deviceId',
-      handler: async (req, res) => {
+      handler: requireAuth(async (req: any, res: any) => {
         const result = await deviceManager.controlDevice(
           req.params.deviceId,
           req.body
         );
         res.json(result);
-      }
+      })
     });
 
-    // API: 控制所有设备
+    // API: 控制所有设备（需要认证）
     api.registerGatewayMethod?.({
       method: 'POST',
       path: '/api/smarthome/control/all',
-      handler: async (req, res) => {
+      handler: requireAuth(async (req: any, res: any) => {
         const result = await deviceManager.controlAll(req.body);
         res.json(result);
-      }
+      })
     });
 
-    // API: 添加设备
+    // API: 添加设备（需要认证）
     api.registerGatewayMethod?.({
       method: 'POST',
       path: '/api/smarthome/devices',
-      handler: async (req, res) => {
+      handler: requireAuth(async (req: any, res: any) => {
         const device = await deviceManager.addDevice(req.body);
         res.json({ success: true, device });
-      }
+      })
     });
 
-    // API: 移除设备
+    // API: 移除设备（需要认证）
     api.registerGatewayMethod?.({
       method: 'DELETE',
       path: '/api/smarthome/devices/:deviceId',
-      handler: async (req, res) => {
+      handler: requireAuth(async (req: any, res: any) => {
         await deviceManager.removeDevice(req.params.deviceId);
         res.json({ success: true });
-      }
+      })
     });
 
     // ========== 注册 Control UI 导航链接 ==========
