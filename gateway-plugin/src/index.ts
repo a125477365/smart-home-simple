@@ -126,40 +126,75 @@ export default definePluginEntry({
     // 认证中间件 - 检查请求是否来自已认证的 Gateway 会话
     const requireAuth = (handler: Function) => {
       return async (req: any, res: any) => {
-        // 检查来源是否为 Gateway 本地
+        // 方式1: 检查 Gateway 会话 Cookie（如果 Gateway 支持）
+        // 方式2: 检查来源是否为 Gateway 本地
         const origin = req.headers?.origin || '';
         const referer = req.headers?.referer || '';
         const host = req.headers?.host || 'localhost:18789';
 
-        // 允许来自 Gateway Control UI 的请求
-        const isFromGateway = origin.includes(host) ||
-                              referer.includes(host) ||
-                              req.ip === '127.0.0.1' ||
-                              req.ip === '::1';
+        // 方式3: 检查请求中是否携带有效的 Gateway Token
+        const authHeader = req.headers?.authorization || '';
+        const urlToken = req.query?.token as string;
+        const token = authHeader.replace('Bearer ', '') || urlToken || '';
 
-        if (!isFromGateway) {
-          // 检查 Authorization header
-          const authHeader = req.headers?.authorization || '';
-          const token = authHeader.replace('Bearer ', '');
+        // 允许来自 Gateway Control UI 的请求（同源）
+        const isFromGateway = origin.includes(host) || referer.includes(host);
 
-          // 验证 token（与 Gateway 共享配置）
-          const gatewayToken = process.env.OPENCLAW_GATEWAY_TOKEN;
-          if (!gatewayToken || token !== gatewayToken) {
-            return res.status(401).json({ error: 'Unauthorized' });
-          }
+        // 允许本地回环请求
+        const isLocal = req.ip === '127.0.0.1' || req.ip === '::1' || req.ip === '::ffff:127.0.0.1';
+
+        // 验证 Token（从 Gateway 配置读取）
+        const gatewayToken = process.env.OPENCLAW_GATEWAY_TOKEN;
+        const hasValidToken = gatewayToken && token === gatewayToken;
+
+        // 认证通过条件：来自 Gateway 或 本地 或 有有效 Token
+        if (isFromGateway || isLocal || hasValidToken) {
+          return handler(req, res);
         }
 
-        return handler(req, res);
+        // 未认证
+        return res.status(401).json({ error: 'Unauthorized', message: '请先登录 Gateway' });
       };
     };
 
-    // 控制面板页面（无需认证，前端会检查）
+    // 页面认证检查 - 返回未认证页面或正常页面
+    const checkPageAuth = async (req: any, res: any) => {
+      const origin = req.headers?.origin || '';
+      const referer = req.headers?.referer || '';
+      const host = req.headers?.host || 'localhost:18789';
+      const cookie = req.headers?.cookie || '';
+
+      // 检查是否从 Gateway Control UI 跳转过来
+      const isFromGateway = referer.includes(host) && referer.includes('/');
+
+      // 检查是否有 Gateway 会话标识（通过 Cookie）
+      const hasGatewaySession = cookie.includes('openclaw') || cookie.includes('gateway');
+
+      // 本地请求
+      const isLocal = req.ip === '127.0.0.1' || req.ip === '::1' || req.ip === '::ffff:127.0.0.1';
+
+      // Token 参数
+      const urlToken = req.query?.token as string;
+      const gatewayToken = process.env.OPENCLAW_GATEWAY_TOKEN;
+      const hasValidToken = gatewayToken && urlToken === gatewayToken;
+
+      if (isFromGateway || hasGatewaySession || isLocal || hasValidToken) {
+        // 已认证，返回正常页面
+        return deviceManager.getWebPage();
+      }
+
+      // 未认证，返回认证提示页面
+      return deviceManager.getAuthRequiredPage();
+    };
+
+    // 控制面板页面（需要认证）
     api.registerGatewayMethod?.({
       method: 'GET',
       path: '/smarthome',
       handler: async (req, res) => {
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        res.send(await deviceManager.getWebPage());
+        const html = await checkPageAuth(req, res);
+        res.send(html);
       }
     });
 

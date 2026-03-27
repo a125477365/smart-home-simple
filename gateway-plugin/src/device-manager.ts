@@ -235,6 +235,79 @@ export class DeviceManager {
     return '<html><body><h1>Smart Home Panel</h1><p>Web interface not found</p></body></html>';
   }
 
+  async getAuthRequiredPage(): Promise<string> {
+    // 返回未认证提示页面
+    return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>需要认证 - OpenClaw Gateway</title>
+    <style>
+        :root {
+            --primary: #667eea;
+            --primary-dark: #764ba2;
+            --text: #333;
+            --text-light: #666;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+        }
+        .card {
+            background: white;
+            border-radius: 16px;
+            padding: 40px;
+            max-width: 400px;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+        }
+        .icon { font-size: 64px; margin-bottom: 20px; }
+        h1 { color: var(--text); font-size: 1.5rem; margin-bottom: 12px; }
+        p { color: var(--text-light); margin-bottom: 24px; line-height: 1.6; }
+        .btn {
+            display: inline-block;
+            padding: 14px 28px;
+            background: var(--primary);
+            color: white;
+            text-decoration: none;
+            border-radius: 10px;
+            font-weight: 500;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102,126,234,0.4);
+        }
+        .hint {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            font-size: 0.85rem;
+            color: var(--text-light);
+        }
+        .hint a { color: var(--primary); }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="icon">🔐</div>
+        <h1>需要认证</h1>
+        <p>智能家居控制面板需要先登录 Gateway<br>请点击下方按钮前往登录</p>
+        <a href="/" class="btn">前往 Gateway 登录</a>
+        <div class="hint">
+            已登录？<a href="/smarthome">点击重试</a>
+        </div>
+    </div>
+</body>
+</html>`;
+  }
+
   private httpPost(ip: string, path: string, data: unknown): Promise<Record<string, unknown>> {
     return new Promise((resolve, reject) => {
       const payload = JSON.stringify(data);
