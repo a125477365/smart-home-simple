@@ -2,46 +2,47 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>SmartHome 设备配网</title>
     <style>
-        * { box-sizing: border-box; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             padding: 20px;
-            max-width: 400px;
-            margin: 0 auto;
-            background: #f5f5f5;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         }
         .card {
             background: white;
-            border-radius: 12px;
+            border-radius: 16px;
             padding: 24px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            max-width: 400px;
+            margin: 0 auto;
         }
-        h1 {
-            color: #667eea;
-            margin-top: 0;
-            font-size: 24px;
+        .header {
+            text-align: center;
+            margin-bottom: 24px;
         }
+        .header .icon { font-size: 48px; margin-bottom: 8px; }
+        .header h1 { color: #333; font-size: 24px; margin-bottom: 4px; }
+        .header p { color: #888; font-size: 14px; }
         .form-group { margin-bottom: 16px; }
-        label {
-            display: block;
-            margin-bottom: 6px;
-            font-weight: 500;
-            color: #333;
-        }
+        label { display: block; margin-bottom: 6px; font-weight: 500; color: #333; font-size: 14px; }
         select, input {
             width: 100%;
-            padding: 12px;
-            border: 1px solid #ddd;
-            border-radius: 8px;
+            padding: 12px 14px;
+            border: 2px solid #eee;
+            border-radius: 10px;
             font-size: 16px;
-            transition: border-color 0.2s;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            background: #fafafa;
         }
         select:focus, input:focus {
             outline: none;
             border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102,126,234,0.1);
+            background: white;
         }
         button {
             width: 100%;
@@ -49,36 +50,33 @@
             background: linear-gradient(135deg, #667eea, #764ba2);
             color: white;
             border: none;
-            border-radius: 8px;
+            border-radius: 10px;
             font-size: 16px;
-            font-weight: 500;
+            font-weight: 600;
             cursor: pointer;
             transition: transform 0.2s, box-shadow 0.2s;
+            margin-top: 8px;
         }
-        button:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(102,126,234,0.4);
-        }
-        button:active { transform: translateY(0); }
-        button:disabled {
-            background: #ccc;
-            cursor: not-allowed;
-            transform: none;
-        }
-        .optional { color: #888; font-size: 13px; }
+        button:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(102,126,234,0.4); }
+        button:active:not(:disabled) { transform: translateY(0); }
+        button:disabled { background: #ccc; cursor: not-allowed; transform: none; }
+        .optional { color: #888; font-size: 12px; }
         details {
             margin: 16px 0;
             padding: 12px;
             background: #f9f9f9;
-            border-radius: 8px;
+            border-radius: 10px;
+            border: 1px solid #eee;
         }
-        summary { cursor: pointer; color: #667eea; }
+        summary { cursor: pointer; color: #667eea; font-weight: 500; }
+        details[open] summary { margin-bottom: 12px; }
         #status {
             margin-top: 16px;
             padding: 12px;
-            border-radius: 8px;
+            border-radius: 10px;
             text-align: center;
             display: none;
+            font-size: 14px;
         }
         #status.success { background: #e8f5e9; color: #2e7d32; }
         #status.error { background: #ffebee; color: #c62828; }
@@ -87,7 +85,7 @@
             display: inline-block;
             width: 16px;
             height: 16px;
-            border: 2px solid #667eea;
+            border: 2px solid #fff;
             border-top-color: transparent;
             border-radius: 50%;
             animation: spin 1s linear infinite;
@@ -95,12 +93,30 @@
             vertical-align: middle;
         }
         @keyframes spin { to { transform: rotate(360deg); } }
+        .wifi-item { display: flex; justify-content: space-between; align-items: center; }
+        .wifi-item .rssi { color: #888; font-size: 12px; }
+        .device-info {
+            background: #f5f5f5;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            font-size: 12px;
+            color: #666;
+        }
+        .device-info strong { color: #333; }
     </style>
 </head>
 <body>
     <div class="card">
-        <h1>🏠 设备配网</h1>
-        <p>请选择您的 WiFi 网络并输入密码</p>
+        <div class="header">
+            <div class="icon">🏠</div>
+            <h1>设备配网</h1>
+            <p>将设备连接到您的家庭 WiFi</p>
+        </div>
+        
+        <div class="device-info">
+            <strong>设备 ID:</strong> <span id="deviceId">加载中...</span>
+        </div>
         
         <div class="form-group">
             <label>WiFi 网络</label>
@@ -121,7 +137,7 @@
         
         <details>
             <summary>高级设置（静态 IP）</summary>
-            <div class="form-group">
+            <div class="form-group" style="margin-top: 12px;">
                 <label class="optional">IP 地址</label>
                 <input type="text" id="ip" placeholder="192.168.1.100">
             </div>
@@ -132,11 +148,24 @@
         </details>
         
         <button id="connectBtn" onclick="connect()">连接 WiFi</button>
-        
         <div id="status"></div>
     </div>
     
     <script>
+        // 加载设备信息
+        async function loadDeviceInfo() {
+            try {
+                const resp = await fetch('/api/info');
+                const info = await resp.json();
+                document.getElementById('deviceId').textContent = info.id || '未知';
+                if (info.name && info.name !== 'Smart Device') {
+                    document.getElementById('devicename').value = info.name;
+                }
+            } catch (e) {
+                document.getElementById('deviceId').textContent = '无法获取';
+            }
+        }
+        
         // 扫描 WiFi
         async function scanWiFi() {
             try {
@@ -159,7 +188,7 @@
                 }
             } catch (e) {
                 console.error('Scan failed:', e);
-                setTimeout(scanWiFi, 2000);
+                document.getElementById('ssid').innerHTML = '<option value="">扫描失败，请刷新重试</option>';
             }
         }
         
@@ -190,7 +219,6 @@
             const btn = document.getElementById('connectBtn');
             btn.disabled = true;
             btn.innerHTML = '<span class="spinner"></span>连接中...';
-            
             showStatus('正在保存配置...', 'info');
             
             try {
@@ -201,14 +229,13 @@
                 });
                 
                 if (response.ok) {
-                    showStatus('✅ 配置成功！设备正在重启...<br>请重新连接您的家庭 WiFi，然后访问 Gateway 管理界面。', 'success');
+                    showStatus('✅ 配置成功！设备正在重启...<br>请重新连接您的家庭 WiFi，设备将自动上线。', 'success');
                 } else {
                     showStatus('❌ 配置失败，请重试', 'error');
                     btn.disabled = false;
                     btn.textContent = '连接 WiFi';
                 }
             } catch (e) {
-                // 请求失败通常意味着设备已开始重启
                 showStatus('✅ 配置已保存，设备正在重启...<br>请重新连接您的家庭 WiFi。', 'success');
             }
         }
@@ -220,7 +247,8 @@
             status.style.display = 'block';
         }
         
-        // 页面加载时扫描 WiFi
+        // 页面加载
+        loadDeviceInfo();
         scanWiFi();
     </script>
 </body>

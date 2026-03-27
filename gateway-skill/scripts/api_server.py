@@ -1,23 +1,26 @@
 #!/usr/bin/env python3
 """
-Gateway API 服务器
-提供设备管理 HTTP API，嵌入 OpenClaw Gateway
+Gateway API 服务器 - 异步版本
+使用 Quart 框架，统一异步模型
 """
 
-from flask import Flask, jsonify, request
-from flask_cors import CORS
+from quart import Quart, jsonify, request
+from quart_cors import cors
 import asyncio
 import json
-import os
+import socket
+import aiohttp
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
-# 配置文件路径
+# 配置
 CONFIG_FILE = Path.home() / '.openclaw' / 'workspace' / 'smart-home-config.json'
+UDP_DISCOVERY_PORT = 43210
+DISCOVERY_TIMEOUT = 5.0
 
-app = Flask(__name__)
-CORS(app)
+app = Quart(__name__)
+app = cors(app, allow_origin='*')
 
 # ========== 配置管理 ==========
 
@@ -36,34 +39,30 @@ def save_config(config: Dict[str, Any]):
 
 # ========== 设备发现 ==========
 
-async def discover_devices_async(timeout: float = 5.0) -> list:
-    """异步发现设备"""
-    import socket
-    
+async def discover_devices_async(timeout: float = DISCOVERY_TIMEOUT) -> List[Dict]:
+    """异步 UDP 发现设备"""
     devices = []
-    discovery_port = 43210
+    loop = asyncio.get_event_loop()
     
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     
     try:
-        sock.bind(('0.0.0.0', discovery_port))
+        sock.bind(('0.0.0.0', UDP_DISCOVERY_PORT))
         sock.setblocking(False)
         
-        # 发送发现请求
+        # 发送广播
         discovery_msg = b'SMART_HOME_DISCOVER'
         for addr in ['255.255.255.255', '192.168.1.255', '192.168.0.255']:
             try:
-                sock.sendto(discovery_msg, (addr, discovery_port))
+                sock.sendto(discovery_msg, (addr, UDP_DISCOVERY_PORT))
             except:
                 pass
         
-        # 等待响应
-        loop = asyncio.get_event_loop()
-        start_time = asyncio.get_event_loop().time()
-        
-        while asyncio.get_event_loop().time() - start_time < timeout:
+        # 异步等待响应
+        start_time = loop.time()
+        while loop.time() - start_time < timeout:
             try:
                 await asyncio.sleep(0.1)
                 while True:
@@ -83,34 +82,47 @@ async def discover_devices_async(timeout: float = 5.0) -> list:
     
     return devices
 
-def run_async(coro):
-    """在同步环境中运行异步函数"""
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+async def get_device_info(ip: str, timeout: float = 2.0) -> Optional[Dict]:
+    """异步获取设备信息"""
     try:
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
+        timeout_config = aiohttp.ClientTimeout(total=timeout)
+        async with aiohttp.ClientSession(timeout=timeout_config) as session:
+            async with session.get(f'http://{ip}/api/info') as resp:
+                if resp.status == 200:
+                    return await resp.json()
+    except:
+        pass
+    return None
+
+async def control_device_async(ip: str, payload: Dict, timeout: float = 5.0) -> Dict:
+    """异步控制设备"""
+    try:
+        timeout_config = aiohttp.ClientTimeout(total=timeout)
+        async with aiohttp.ClientSession(timeout=timeout_config) as session:
+            async with session.post(f'http://{ip}/api/control', json=payload) as resp:
+                return await resp.json()
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
 
 # ========== HTTP API ==========
 
 @app.route('/api/smarthome/devices', methods=['GET'])
-def list_devices():
+async def list_devices():
     """获取设备列表"""
     config = load_config()
     return jsonify({'devices': config.get('devices', {}), 'count': len(config.get('devices', {}))})
 
 @app.route('/api/smarthome/devices', methods=['POST'])
-def add_device():
+async def add_device():
     """添加设备"""
-    data = request.json
+    data = await request.get_json()
     if not data or 'id' not in data:
         return jsonify({'error': 'missing device id'}), 400
     
     config = load_config()
     config.setdefault('devices', {})
-    
     device_id = data['id']
+    
     config['devices'][device_id] = {
         'id': device_id,
         'ip': data.get('ip', ''),
@@ -127,7 +139,7 @@ def add_device():
     return jsonify({'success': True, 'device': config['devices'][device_id]})
 
 @app.route('/api/smarthome/devices/<device_id>', methods=['DELETE'])
-def remove_device(device_id):
+async def remove_device(device_id):
     """移除设备"""
     config = load_config()
     if device_id in config.get('devices', {}):
@@ -137,10 +149,8 @@ def remove_device(device_id):
     return jsonify({'error': 'device not found'}), 404
 
 @app.route('/api/smarthome/control/<device_id>', methods=['POST'])
-def control_device(device_id):
-    """控制设备"""
-    import requests
-    
+async def control_single_device(device_id):
+    """控制单个设备"""
     config = load_config()
     device = config.get('devices', {}).get(device_id)
     
@@ -155,80 +165,59 @@ def control_device(device_id):
     if not device:
         return jsonify({'error': 'device not found'}), 404
     
-    try:
-        resp = requests.post(
-            f"http://{device['ip']}/api/control",
-            json=request.json,
-            timeout=5
-        )
-        result = resp.json()
-        
-        # 更新本地状态
-        if result.get('success'):
-            if 'state' in request.json:
-                device['state'] = request.json['state']
-            if 'brightness' in request.json:
-                device['brightness'] = request.json['brightness']
-            if 'name' in request.json:
-                device['name'] = request.json['name']
-            save_config(config)
-        
-        return jsonify(result)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    payload = await request.get_json()
+    result = await control_device_async(device['ip'], payload)
+    
+    # 更新本地状态
+    if result.get('success'):
+        if 'state' in payload:
+            device['state'] = payload['state']
+        if 'brightness' in payload:
+            device['brightness'] = payload['brightness']
+        if 'name' in payload:
+            device['name'] = payload['name']
+        save_config(config)
+    
+    return jsonify(result)
 
 @app.route('/api/smarthome/control/all', methods=['POST'])
-def control_all():
+async def control_all_devices():
     """控制所有设备"""
-    import requests
-    from concurrent.futures import ThreadPoolExecutor
-    
     config = load_config()
-    state = request.json.get('state')
-    brightness = request.json.get('brightness')
+    payload = await request.get_json()
+    state = payload.get('state')
+    brightness = payload.get('brightness')
     
-    results = {}
+    tasks = []
+    device_ids = []
     
-    def control_one(device_id, device):
-        try:
-            payload = {}
-            if state is not None:
-                payload['state'] = state
-            if brightness is not None:
-                payload['brightness'] = brightness
-            
-            resp = requests.post(
-                f"http://{device['ip']}/api/control",
-                json=payload,
-                timeout=5
-            )
-            return resp.json().get('success', False)
-        except:
-            return False
+    for device_id, device in config.get('devices', {}).items():
+        control_payload = {}
+        if state is not None:
+            control_payload['state'] = state
+        if brightness is not None:
+            control_payload['brightness'] = brightness
+        tasks.append(control_device_async(device['ip'], control_payload))
+        device_ids.append(device_id)
     
-    with ThreadPoolExecutor(max_workers=10) as executor:
-        futures = {}
-        for device_id, device in config.get('devices', {}).items():
-            futures[executor.submit(control_one, device_id, device)] = device_id
-        
-        for future in futures:
-            results[futures[future]] = future.result()
+    results = await asyncio.gather(*tasks)
     
     # 更新状态
-    for device_id, device in config.get('devices', {}).items():
-        if results.get(device_id):
+    for device_id, result in zip(device_ids, results):
+        if result.get('success'):
+            device = config['devices'][device_id]
             if state is not None:
                 device['state'] = state
             if brightness is not None:
                 device['brightness'] = brightness
-    save_config(config)
     
-    return jsonify({'success': all(results.values()), 'results': results})
+    save_config(config)
+    return jsonify({'success': all(r.get('success', False) for r in results), 'results': dict(zip(device_ids, [r.get('success', False) for r in results]))})
 
-@app.route('/api/smarthome/discover', methods=['POST', 'GET'])
-def discover():
+@app.route('/api/smarthome/discover', methods=['GET', 'POST'])
+async def discover():
     """发现新设备"""
-    devices = run_async(discover_devices_async(5.0))
+    devices = await discover_devices_async()
     
     # 过滤已添加的设备
     config = load_config()
@@ -238,39 +227,37 @@ def discover():
     return jsonify({'devices': new_devices, 'count': len(new_devices)})
 
 @app.route('/api/smarthome/sync', methods=['POST'])
-def sync_state():
+async def sync_state():
     """同步所有设备状态"""
-    import requests
-    from concurrent.futures import ThreadPoolExecutor
-    
     config = load_config()
     
-    def sync_one(device_id, device):
-        try:
-            resp = requests.get(f"http://{device['ip']}/api/info", timeout=5)
-            info = resp.json()
+    tasks = []
+    device_ids = []
+    
+    for device_id, device in config.get('devices', {}).items():
+        tasks.append(get_device_info(device['ip']))
+        device_ids.append(device_id)
+    
+    results = await asyncio.gather(*tasks)
+    
+    # 更新状态
+    for device_id, info in zip(device_ids, results):
+        if info:
+            device = config['devices'][device_id]
             device['state'] = info.get('state', device['state'])
             device['brightness'] = info.get('brightness', device['brightness'])
             if info.get('name'):
                 device['name'] = info['name']
-            return True
-        except:
-            return False
-    
-    with ThreadPoolExecutor(max_workers=10) as executor:
-        futures = {executor.submit(sync_one, did, d): did for did, d in config.get('devices', {}).items()}
-        results = {futures[f]: f.result() for f in futures}
     
     save_config(config)
-    return jsonify({'success': True, 'synced': sum(results.values())})
+    return jsonify({'success': True, 'synced': sum(1 for r in results if r)})
 
 @app.route('/api/smarthome/status', methods=['GET'])
-def get_status():
+async def get_status():
     """获取系统状态"""
     config = load_config()
     devices = config.get('devices', {})
     on_count = sum(1 for d in devices.values() if d.get('state'))
-    
     return jsonify({
         'total_devices': len(devices),
         'on_devices': on_count,
@@ -281,17 +268,17 @@ def get_status():
 
 @app.route('/smarthome/')
 @app.route('/smarthome/<path:path>')
-def serve_web(path=''):
+async def serve_web(path=''):
     """服务 Web 界面"""
-    from flask import send_file
+    from quart import send_file
     web_dir = Path(__file__).parent / 'web'
     
     if not path or path == 'index.html':
-        return send_file(web_dir / 'index.html')
+        return await send_file(web_dir / 'index.html')
     
     file_path = web_dir / path
     if file_path.exists():
-        return send_file(file_path)
+        return await send_file(file_path)
     
     return jsonify({'error': 'not found'}), 404
 

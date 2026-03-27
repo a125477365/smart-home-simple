@@ -1,68 +1,75 @@
 # Simple Smart Home System
+
 极简智能家居控制系统 - 一个真正简单、可量产的解决方案
 
 ## 系统架构
 
 ```
-┌─────────────────┐         WiFi          ┌──────────────────┐
-│   ESP32 设备    │ ◄──────────────────► │  OpenClaw Gateway │
-│  (灯具/插座等)   │      局域网API        │    管理端界面     │
-└─────────────────┘                       └──────────────────┘
+┌─────────────────┐      WiFi      ┌──────────────────┐
+│   ESP32 设备    │◄──────────────►│  OpenClaw Gateway │
+│  (灯具/插座等)  │    局域网API    │    管理端界面     │
+└─────────────────┘                 └──────────────────┘
         │
         ▼
 ┌──────────────────┐
-│   配网 Web 页面   │
-│  (内置 SPIFFS)   │
+│  配网 Web 页面   │
+│ (内置 SPIFFS)    │
 └──────────────────┘
 ```
 
 ## 核心特性
 
-1. **设备端极简**
-   - ESP32 主控，成本低（< ¥20）
-   - 提供 RESTful API
-   - 支持 UDP 自动发现
-   - **配网页面内置**（SPIFFS 文件系统）
+### 1. 设备端极简
+- ESP32 主控，成本低（< ¥20）
+- 模块化固件架构，易于维护
+- 提供 RESTful API
+- 支持 UDP 自动发现
+- **配网页面内置**（SPIFFS 文件系统）
 
-2. **Gateway 集成**
-   - 自动发现局域网设备
-   - Web 管理界面
-   - OpenClaw Skill 控制
+### 2. Gateway 集成
+- 异步 API 服务器（Quart 框架）
+- 自动发现局域网设备
+- Web 管理界面
+- OpenClaw Skill 控制
 
-3. **手机配网**
-   - 首次连接设备 WiFi（SmartHome-XXXXXX）
-   - 自动弹出配网页面（captive portal）
-   - 配置家庭 WiFi + 静态 IP
-   - 无需云服务
+### 3. 手机配网
+- 首次连接设备 WiFi（SmartHome-XXXXXX）
+- 自动弹出配网页面
+- 配置家庭 WiFi + 静态 IP
+- 无需云服务
 
 ## 目录结构
 
 ```
 smart-home-simple/
-├── firmware/           # ESP32 固件代码
+├── firmware/              # ESP32 固件代码（模块化）
 │   ├── src/
-│   │   └── main.cpp    # 主程序（含 API + 配网）
-│   ├── data/           # SPIFFS 文件系统
-│   │   └── index.html  # 配网页面
+│   │   ├── main.cpp       # 主入口
+│   │   ├── config.h       # 配置常量
+│   │   ├── config_store   # 配置存储模块
+│   │   ├── device_control # 设备控制模块
+│   │   ├── wifi_manager   # WiFi 管理模块
+│   │   ├── api_server     # API 服务模块
+│   │   └── udp_discovery  # UDP 发现模块
+│   ├── data/
+│   │   └── index.html     # 配网页面
 │   └── platformio.ini
 │
-├── hardware/           # 硬件设计文档
-│   ├── schematic.pdf   # 电路原理图
-│   ├── pcb/            # PCB 设计文件
-│   ├── bom.csv         # 物料清单
-│   └── enclosure/      # 外壳设计
-│
-├── gateway-skill/      # OpenClaw Skill
+├── gateway-skill/         # OpenClaw Skill
 │   ├── SKILL.md
+│   ├── requirements.txt
 │   └── scripts/
-│       ├── discover.py # 设备发现
-│       ├── control.py  # 设备控制
-│       └── web/        # 管理界面
+│       ├── api_server.py  # 异步 API 服务器
+│       └── discover.py    # 设备发现脚本
 │
-└── docs/               # 文档
-    ├── API.md          # 设备 API 文档
-    ├── PRODUCTION.md   # 生产指南
-    └── INTEGRATION.md  # 集成指南
+├── hardware/              # 硬件设计文档
+│   ├── README.md
+│   └── bom.csv
+│
+└── docs/                  # 文档
+    ├── API.md
+    ├── PRODUCTION.md
+    └── INTEGRATION.md
 ```
 
 ## 快速开始
@@ -71,8 +78,8 @@ smart-home-simple/
 
 ```bash
 cd firmware
-pio run -t upload       # 烧录固件
-pio run -t uploadfs     # 烧录文件系统（配网页面）
+pio run -t upload      # 烧录固件
+pio run -t uploadfs    # 烧录文件系统（配网页面）
 ```
 
 ### 2. 首次配网
@@ -96,21 +103,20 @@ pio run -t uploadfs     # 烧录文件系统（配网页面）
 
 详见 [docs/PRODUCTION.md](docs/PRODUCTION.md)
 
-## 技术细节
+## 版本历史
 
-### 配网页面原理
+### v1.1.0 (当前)
+- 模块化重构固件代码
+- Gateway 改用 Quart 异步框架
+- 添加状态掉电保存
+- 优化配网页面 UI
+- AP 模式超时保护
 
-- 配网页面存储在 SPIFFS 文件系统中
-- 编译时通过 `pio run -t uploadfs` 上传到设备
-- 设备启动时从 SPIFFS 读取 HTML 提供配网服务
-- 无需外部服务器，完全自包含
-
-### 为什么用 SPIFFS？
-
-1. **自包含**：固件 + 配网页面一体化
-2. **可更新**：修改 HTML 后单独上传文件系统
-3. **低成本**：不需要外部存储芯片
-4. **量产友好**：一次烧录，开箱即用
+### v1.0.0
+- 初始版本
+- 基础配网功能
+- RESTful API
+- UDP 设备发现
 
 ## License
 
