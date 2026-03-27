@@ -1,0 +1,26 @@
+{
+  "name": "@openclaw/plugin-smart-home",
+  "version": "1.1.0",
+  "type": "module",
+  "description": "智能家居控制插件 - 深度集成 OpenClaw Gateway",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "keywords": ["openclaw", "smart-home", "iot", "esp32"],
+  "author": "谭坚",
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.3.0",
+    "@types/node": "^20.0.0",
+    "openclaw": "file:/app"
+  },
+  "peerDependencies": {
+    "openclaw": ">=1.0.0"
+  },
+  "openclaw": {
+    "extensions": ["./dist/index.js"]
+  }
+}

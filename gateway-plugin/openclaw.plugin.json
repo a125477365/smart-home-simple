@@ -1,0 +1,27 @@
+{
+  "id": "smart-home",
+  "name": "Smart Home Control",
+  "description": "智能家居控制面板 - 管理局域网 ESP32 设备",
+  "icon": "home",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "apiPort": {
+        "type": "number",
+        "default": 53210,
+        "description": "设备发现 UDP 端口"
+      },
+      "autoDiscover": {
+        "type": "boolean",
+        "default": true,
+        "description": "启动时自动发现设备"
+      },
+      "discoverInterval": {
+        "type": "number",
+        "default": 60000,
+        "description": "自动发现间隔（毫秒）"
+      }
+    }
+  }
+}

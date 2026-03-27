@@ -2,180 +2,152 @@
 
 ## 概述
 
-本指南说明如何将智能家居系统集成到 OpenClaw Gateway。
+本指南说明如何将智能家居系统原生集成到 OpenClaw Gateway。
 
 ## 架构
 
 ```
-┌──────────────────────────────────────────────────────┐
-│                   OpenClaw Gateway                    │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  │
-│  │  Web UI     │  │  API Server │  │  Skill      │  │
-│  │ /smarthome/ │  │  Quart App  │  │  自然语言   │  │
-│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  │
-│         │                │                │          │
-│         └────────────────┴────────────────┘          │
-│                          │                            │
-└──────────────────────────┼────────────────────────────┘
-                           │ HTTP API
-                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    OpenClaw Gateway                          │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │
+│  │  Web UI     │  │  Agent API  │  │  Plugin System      │ │
+│  │ /smarthome  │  │  Tool Calls │  │  gateway-plugin     │ │
+│  └──────┬──────┘  └──────┬──────┘  └──────────┬──────────┘ │
+│         │                │                     │            │
+│         └────────────────┴─────────────────────┘            │
+│                           │                                  │
+└───────────────────────────┼──────────────────────────────────┘
+                            │ HTTP API
+                            ▼
               ┌────────────────────────┐
-              │   局域网智能设备       │
-              │   (ESP32 + REST API)   │
+              │  局域网智能设备         │
+              │  (ESP32 + REST API)    │
               └────────────────────────┘
 ```
 
-## 部署方式
+## 安装插件
 
-### 方式一：独立进程
-
-```bash
-# 安装依赖
-cd gateway-skill
-pip install -r requirements.txt
-
-# 启动服务
-python scripts/api_server.py
-
-# 服务将运行在 http://localhost:5000
-```
-
-### 方式二：嵌入 Gateway
-
-在 OpenClaw Gateway 的 `plugins` 目录创建软链接：
+### 方式一：开发模式
 
 ```bash
-ln -s /path/to/smart-home-simple/gateway-skill ~/.openclaw/plugins/smart-home
+cd gateway-plugin
+pnpm install
+pnpm build
+
+# 创建符号链接
+mkdir -p ~/.openclaw/plugins
+ln -s $(pwd) ~/.openclaw/plugins/smart-home
 ```
 
-在 Gateway 配置中启用：
-
-```yaml
-# ~/.openclaw/config/gateway.yaml
-plugins:
-  entries:
-    smart-home:
-      enabled: true
-      module: smart-home.scripts.api_server:app
-      route: /smarthome
-```
-
-### 方式三：Systemd 服务
+### 方式二：从 ClawHub 安装（发布后）
 
 ```bash
-# 创建服务文件
-sudo cat > /etc/systemd/system/smarthome.service << EOF
-[Unit]
-Description=Smart Home API Server
-After=network.target
-
-[Service]
-Type=simple
-User=node
-WorkingDirectory=/home/node/.openclaw/workspace/smart-home-simple/gateway-skill
-ExecStart=/usr/bin/python3 scripts/api_server.py
-Restart=always
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-# 启动服务
-sudo systemctl enable smarthome
-sudo systemctl start smarthome
+openclaw plugins install @openclaw/plugin-smart-home
 ```
 
-## API 代理配置
+## 配置
 
-如需通过 Gateway 统一入口访问，配置反向代理：
+编辑 `~/.openclaw/config/openclaw.json`：
 
-```yaml
-# OpenClaw Gateway 路由配置
-routes:
-  /api/smarthome:
-    proxy: http://localhost:5000/api/smarthome
-  /smarthome:
-    proxy: http://localhost:5000/smarthome
+```json
+{
+  "plugins": {
+    "smart-home": {
+      "apiPort": 43210,
+      "autoDiscover": true,
+      "discoverInterval": 60000
+    }
+  }
+}
 ```
 
-## 安全配置
+| 配置项 | 类型 | 默认值 | 说明 |
+|--------|------|--------|------|
+| apiPort | number | 43210 | UDP 发现端口 |
+| autoDiscover | boolean | true | 启动时自动发现 |
+| discoverInterval | number | 60000 | 发现间隔（毫秒） |
 
-### 1. 限制访问 IP
+## 使用方式
 
-```python
-# api_server.py 中添加
-from quart import request, abort
+### 1. Web 控制面板
 
-ALLOWED_IPS = ['127.0.0.1', '192.168.1.0/24']
+访问 Gateway 的 `/smarthome` 路径：
 
-@app.before_request
-def limit_remote_addr():
-    client_ip = request.remote_addr
-    if not ip_in_range(client_ip, ALLOWED_IPS):
-        abort(403)
+```
+http://localhost:3000/smarthome
 ```
 
-### 2. API Token（可选）
+功能：
+- 设备列表展示
+- 开关控制
+- 亮度调节
+- 设备发现
+- 重命名/移除
 
-```python
-# 添加 Token 认证
-API_TOKEN = os.environ.get('SMARTHOME_TOKEN', 'your-secret-token')
+### 2. 自然语言控制
 
-@app.before_request
-def check_token():
-    if request.endpoint in ['discover', 'control_all']:
-        token = request.headers.get('X-API-Token')
-        if token != API_TOKEN:
-            abort(401)
+通过 Agent 对话控制：
+
+```
+用户: 发现智能家居设备
+助手: [调用 smart_home_discover 工具]
+
+用户: 打开客厅的灯
+助手: [调用 smart_home_control 工具]
+
+用户: 关闭所有灯
+助手: [调用 smart_home_all_off 工具]
 ```
 
-## 自然语言 Skill 集成
+### 3. HTTP API
 
-在 OpenClaw 中注册自然语言处理器：
-
-```python
-# ~/.openclaw/skills/smart-home-nlp/SKILL.md
-
-触发词：智能家居、灯、插座
-
-意图识别：
-- 打开/关闭 → 调用 control API
-- 发现 → 调用 discover API
-- 状态 → 调用 status API
-- 亮度 → 调用 control API (brightness)
-```
-
-## 测试
+直接调用 Gateway API：
 
 ```bash
-# 测试 API
-curl http://localhost:5000/api/smarthome/status
-
-# 发现设备
-curl -X POST http://localhost:5000/api/smarthome/discover
+# 获取设备列表
+curl http://localhost:3000/api/smarthome/devices
 
 # 控制设备
-curl -X POST http://localhost:5000/api/smarthome/control/<device_id> \
+curl -X POST http://localhost:3000/api/smarthome/control/<device-id> \
   -H "Content-Type: application/json" \
-  -d '{"state": true}'
+  -d '{"state": true, "brightness": 80}'
+
+# 发现设备
+curl -X POST http://localhost:3000/api/smarthome/discover
 ```
+
+## 工具列表
+
+插件注册以下 Agent 工具：
+
+| 工具名 | 说明 |
+|--------|------|
+| smart_home_list_devices | 列出所有设备 |
+| smart_home_control | 控制单个设备 |
+| smart_home_discover | 扫描新设备 |
+| smart_home_all_on | 打开所有设备 |
+| smart_home_all_off | 关闭所有设备 |
 
 ## 故障排除
 
 ### 设备发现失败
 
-1. 检查设备是否开机
-2. 检查设备是否在同一局域网
-3. 检查 UDP 43210 端口是否被防火墙阻止
+1. 确保设备和 Gateway 在同一局域网
+2. 检查防火墙是否阻止 UDP 43210 端口
+3. 确认设备已开机并连接到 WiFi
 
-### API 无法访问设备
+### 控制无响应
 
-1. 检查设备 IP 是否正确
-2. 检查设备 API 服务是否运行
-3. 检查网络连通性：`ping <device-ip>`
+1. 检查设备 IP 是否变化（建议设置静态 IP）
+2. 检查设备 API 服务是否正常
+3. 尝试重新发现设备
 
-### Web 界面空白
+### 插件未加载
 
-1. 检查 API 服务是否启动
-2. 检查浏览器控制台错误
-3. 检查 CORS 配置
+1. 确认插件目录正确
+2. 检查 Gateway 启动日志
+3. 运行 `openclaw plugins list` 确认
+
+## License
+
+MIT
