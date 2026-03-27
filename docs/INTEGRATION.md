@@ -11,7 +11,7 @@
 │                   OpenClaw Gateway                    │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  │
 │  │  Web UI     │  │  API Server │  │  Skill      │  │
-│  │ /smarthome/ │  │  Flask App  │  │  自然语言   │  │
+│  │ /smarthome/ │  │  Quart App  │  │  自然语言   │  │
 │  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  │
 │         │                │                │          │
 │         └────────────────┴────────────────┘          │
@@ -104,7 +104,7 @@ routes:
 
 ```python
 # api_server.py 中添加
-from flask import request, abort
+from quart import request, abort
 
 ALLOWED_IPS = ['127.0.0.1', '192.168.1.0/24']
 
