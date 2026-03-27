@@ -7,7 +7,6 @@ import { definePluginEntry } from 'openclaw/plugin-sdk/plugin-entry';
 import { Type } from '@sinclair/typebox';
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/types';
 import { DeviceManager } from './device-manager.js';
-import { createWebRoutes } from './web-routes.js';
 
 export interface SmartHomeConfig {
   apiPort?: number;
@@ -24,7 +23,7 @@ export default definePluginEntry({
     type: 'object',
     additionalProperties: false,
     properties: {
-      apiPort: { type: 'number', default: 53210 },
+      apiPort: { type: 'number', default: 43210 },
       autoDiscover: { type: 'boolean', default: true },
       discoverInterval: { type: 'number', default: 60000 }
     }
@@ -34,7 +33,8 @@ export default definePluginEntry({
     const config = api.config as SmartHomeConfig;
     const deviceManager = new DeviceManager(config);
 
-    // 注册设备控制工具
+    // ========== 注册 Agent 工具 ==========
+
     api.registerTool({
       name: 'smart_home_list_devices',
       description: '列出所有已配置的智能家居设备',
@@ -121,16 +121,19 @@ export default definePluginEntry({
       }
     });
 
-    // 注册 Gateway HTTP 路由
+    // ========== 注册 Gateway HTTP 路由 ==========
+
+    // 控制面板页面
     api.registerGatewayMethod?.({
       method: 'GET',
       path: '/smarthome',
       handler: async (req, res) => {
-        res.setHeader('Content-Type', 'text/html');
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
         res.send(await deviceManager.getWebPage());
       }
     });
 
+    // API: 获取设备列表
     api.registerGatewayMethod?.({
       method: 'GET',
       path: '/api/smarthome/devices',
@@ -139,6 +142,7 @@ export default definePluginEntry({
       }
     });
 
+    // API: 发现新设备
     api.registerGatewayMethod?.({
       method: 'POST',
       path: '/api/smarthome/discover',
@@ -148,6 +152,17 @@ export default definePluginEntry({
       }
     });
 
+    // API: 同步设备状态
+    api.registerGatewayMethod?.({
+      method: 'POST',
+      path: '/api/smarthome/sync',
+      handler: async (req, res) => {
+        const result = await deviceManager.syncAllDevices();
+        res.json(result);
+      }
+    });
+
+    // API: 控制单个设备
     api.registerGatewayMethod?.({
       method: 'POST',
       path: '/api/smarthome/control/:deviceId',
@@ -160,6 +175,7 @@ export default definePluginEntry({
       }
     });
 
+    // API: 控制所有设备
     api.registerGatewayMethod?.({
       method: 'POST',
       path: '/api/smarthome/control/all',
@@ -169,6 +185,17 @@ export default definePluginEntry({
       }
     });
 
+    // API: 添加设备
+    api.registerGatewayMethod?.({
+      method: 'POST',
+      path: '/api/smarthome/devices',
+      handler: async (req, res) => {
+        const device = await deviceManager.addDevice(req.body);
+        res.json({ success: true, device });
+      }
+    });
+
+    // API: 移除设备
     api.registerGatewayMethod?.({
       method: 'DELETE',
       path: '/api/smarthome/devices/:deviceId',
@@ -178,11 +205,22 @@ export default definePluginEntry({
       }
     });
 
+    // ========== 注册 Control UI 导航链接 ==========
+    // 在 Gateway Control UI 中添加 "智能家居" 入口
+    api.registerNavLink?.({
+      id: 'smart-home',
+      label: '智能家居',
+      icon: 'home',
+      path: '/smarthome',
+      order: 100  // 排在设置之后
+    });
+
     // 启动自动发现
     if (config.autoDiscover) {
       deviceManager.startAutoDiscover(config.discoverInterval || 60000);
     }
 
     console.log('[SmartHome] Plugin registered');
+    console.log('[SmartHome] Control panel: http://localhost:18789/smarthome');
   }
 });

@@ -10,10 +10,11 @@
 ┌─────────────────────────────────────────────────────────────┐
 │                    OpenClaw Gateway                          │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │
-│  │  Web UI     │  │  Agent API  │  │  Plugin System      │ │
-│  │ /smarthome  │  │  Tool Calls │  │  gateway-plugin     │ │
+│  │  Control UI │  │  Agent API  │  │  Plugin System      │ │
+│  │  (主界面)   │  │  Tool Calls │  │  smart-home 插件    │ │
 │  └──────┬──────┘  └──────┬──────┘  └──────────┬──────────┘ │
 │         │                │                     │            │
+│         │  导航链接       │                     │            │
 │         └────────────────┴─────────────────────┘            │
 │                           │                                  │
 └───────────────────────────┼──────────────────────────────────┘
@@ -69,20 +70,27 @@ openclaw plugins install @openclaw/plugin-smart-home
 
 ## 使用方式
 
-### 1. Web 控制面板
+### 1. 通过 Control UI 导航
 
-访问 Gateway 的 `/smarthome` 路径：
+安装插件后，Gateway Control UI 会新增 **"智能家居"** 导航入口：
 
 ```
-http://localhost:3000/smarthome
+http://localhost:18789/
+      ↓
+   Control UI
+      ↓
+  点击 "智能家居" 链接
+      ↓
+http://localhost:18789/smarthome
 ```
 
-功能：
+**功能：**
 - 设备列表展示
 - 开关控制
 - 亮度调节
 - 设备发现
 - 重命名/移除
+- 自动刷新状态
 
 ### 2. 自然语言控制
 
@@ -105,15 +113,18 @@ http://localhost:3000/smarthome
 
 ```bash
 # 获取设备列表
-curl http://localhost:3000/api/smarthome/devices
+curl http://localhost:18789/api/smarthome/devices
 
 # 控制设备
-curl -X POST http://localhost:3000/api/smarthome/control/<device-id> \
+curl -X POST http://localhost:18789/api/smarthome/control/<device-id> \
   -H "Content-Type: application/json" \
   -d '{"state": true, "brightness": 80}'
 
 # 发现设备
-curl -X POST http://localhost:3000/api/smarthome/discover
+curl -X POST http://localhost:18789/api/smarthome/discover
+
+# 同步状态
+curl -X POST http://localhost:18789/api/smarthome/sync
 ```
 
 ## 工具列表
@@ -127,6 +138,25 @@ curl -X POST http://localhost:3000/api/smarthome/discover
 | smart_home_discover | 扫描新设备 |
 | smart_home_all_on | 打开所有设备 |
 | smart_home_all_off | 关闭所有设备 |
+
+## 导航集成
+
+插件通过 `api.registerNavLink()` 在 Control UI 中注册导航入口：
+
+```typescript
+api.registerNavLink({
+  id: 'smart-home',
+  label: '智能家居',
+  icon: 'home',
+  path: '/smarthome',
+  order: 100
+});
+```
+
+用户在 Control UI 可以：
+1. 看到侧边栏的 "智能家居" 入口
+2. 点击后跳转到控制面板
+3. 控制面板有 "返回 Gateway" 链接
 
 ## 故障排除
 
@@ -147,6 +177,12 @@ curl -X POST http://localhost:3000/api/smarthome/discover
 1. 确认插件目录正确
 2. 检查 Gateway 启动日志
 3. 运行 `openclaw plugins list` 确认
+
+### 导航链接不显示
+
+1. 确认插件已正确编译（`pnpm build`）
+2. 重启 Gateway
+3. 检查 `api.registerNavLink` 是否被调用
 
 ## License
 

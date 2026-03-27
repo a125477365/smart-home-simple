@@ -203,6 +203,29 @@ export class DeviceManager {
     }
   }
 
+  async syncAllDevices(): Promise<{ success: boolean; synced: number; total: number }> {
+    const deviceIds = Object.keys(this.deviceConfig.devices);
+    let synced = 0;
+
+    for (const deviceId of deviceIds) {
+      const device = this.deviceConfig.devices[deviceId];
+      try {
+        const info = await this.httpGet(device.ip, '/api/info');
+        if (info) {
+          device.state = info.state ?? device.state;
+          device.brightness = info.brightness ?? device.brightness;
+          if (info.name) device.name = info.name;
+          synced++;
+        }
+      } catch {
+        // 忽略失败
+      }
+    }
+
+    this.saveConfig();
+    return { success: true, synced, total: deviceIds.length };
+  }
+
   async getWebPage(): Promise<string> {
     // 返回嵌入式 Web 界面
     const webPath = path.join(__dirname, 'web', 'panel.html');
@@ -247,6 +270,39 @@ export class DeviceManager {
       });
 
       req.write(payload);
+      req.end();
+    });
+  }
+
+  private httpGet(ip: string, path: string): Promise<Record<string, unknown> | null> {
+    return new Promise((resolve) => {
+      const req = http.request(
+        {
+          hostname: ip,
+          port: 80,
+          path,
+          method: 'GET',
+          timeout: 3000
+        },
+        (res) => {
+          let body = '';
+          res.on('data', chunk => body += chunk);
+          res.on('end', () => {
+            try {
+              resolve(JSON.parse(body));
+            } catch {
+              resolve(null);
+            }
+          });
+        }
+      );
+
+      req.on('error', () => resolve(null));
+      req.on('timeout', () => {
+        req.destroy();
+        resolve(null);
+      });
+
       req.end();
     });
   }

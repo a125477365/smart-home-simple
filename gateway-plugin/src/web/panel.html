@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>智能家居控制面板</title>
+    <title>智能家居控制面板 - OpenClaw</title>
+    <link rel="icon" href="/favicon.ico">
     <link rel="stylesheet" href="/static/styles.css">
     <style>
         :root {
@@ -25,6 +26,32 @@
             padding: 20px;
         }
         .container { max-width: 1200px; margin: 0 auto; }
+
+        /* 顶部导航栏 - 返回 Gateway */
+        .top-nav {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+            padding: 12px 16px;
+            background: var(--card);
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        }
+        .top-nav a {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: var(--primary);
+            text-decoration: none;
+            font-size: 0.9rem;
+        }
+        .top-nav a:hover { text-decoration: underline; }
+        .top-nav .title {
+            flex: 1;
+            font-weight: 600;
+            color: var(--text);
+        }
 
         /* 头部 */
         .header {
@@ -288,6 +315,11 @@
 </head>
 <body>
     <div class="container">
+        <!-- 顶部导航 -->
+        <div class="top-nav">
+            <a href="/">← 返回 Gateway</a>
+            <span class="title">🏠 智能家居控制面板</span>
+        </div>
         <div class="header">
             <h1>🏠 智能家居控制面板</h1>
             <p class="subtitle" id="status-text">已连接 0 个设备</p>
